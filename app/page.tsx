@@ -137,6 +137,18 @@ export default function Home() {
             >
               🟡 Đối soát thảm Bali To →
             </a>
+            <a
+              href="/bali-to-image-generator"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "7px 16px", borderRadius: 7,
+                background: "#fdf4ff", border: "1px solid #e9d5ff",
+                color: "#7c3aed", fontWeight: 600, fontSize: 13,
+                textDecoration: "none", transition: "opacity 0.15s",
+              }}
+            >
+              🖼️ Sinh ảnh Bali To →
+            </a>
           </div>
         </div>
 
