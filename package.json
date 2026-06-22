@@ -9,12 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "fuse.js": "^7.4.2",
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

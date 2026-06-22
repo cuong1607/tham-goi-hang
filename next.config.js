@@ -2,7 +2,7 @@
 const nextConfig = {
   // Tắt body parser mặc định để dùng formData
   experimental: {
-    serverComponentsExternalPackages: ['xlsx'],
+    serverComponentsExternalPackages: ['xlsx', 'better-sqlite3'],
   },
 }
 

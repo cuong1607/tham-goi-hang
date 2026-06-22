@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 
 type Mode = "bali" | "cuu";
 
+
 const MODES: { key: Mode; label: string; color: string; bg: string; border: string }[] = [
   {
     key: "bali",
@@ -111,6 +112,26 @@ export default function Home() {
           <p style={{ color: "#666", marginTop: 6, fontSize: 14 }}>
             Upload phiếu đóng gói .xlsx → Xuất text gọi hàng
           </p>
+          <a
+            href="/order-check"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 12,
+              padding: "7px 16px",
+              borderRadius: 7,
+              background: "#dcfce7",
+              border: "1px solid #86efac",
+              color: "#16a34a",
+              fontWeight: 600,
+              fontSize: 13,
+              textDecoration: "none",
+              transition: "opacity 0.15s",
+            }}
+          >
+            🔍 Đối soát gọi hàng theo mẫu có sẵn →
+          </a>
         </div>
 
         {/* Tab */}
