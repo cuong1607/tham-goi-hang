@@ -112,26 +112,32 @@ export default function Home() {
           <p style={{ color: "#666", marginTop: 6, fontSize: 14 }}>
             Upload phiếu đóng gói .xlsx → Xuất text gọi hàng
           </p>
-          <a
-            href="/order-check"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              marginTop: 12,
-              padding: "7px 16px",
-              borderRadius: 7,
-              background: "#dcfce7",
-              border: "1px solid #86efac",
-              color: "#16a34a",
-              fontWeight: 600,
-              fontSize: 13,
-              textDecoration: "none",
-              transition: "opacity 0.15s",
-            }}
-          >
-            🔍 Đối soát gọi hàng theo mẫu có sẵn →
-          </a>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginTop: 12 }}>
+            <a
+              href="/order-check"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "7px 16px", borderRadius: 7,
+                background: "#dcfce7", border: "1px solid #86efac",
+                color: "#16a34a", fontWeight: 600, fontSize: 13,
+                textDecoration: "none", transition: "opacity 0.15s",
+              }}
+            >
+              🔍 Đối soát thảm Cừu →
+            </a>
+            <a
+              href="/bali-check"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "7px 16px", borderRadius: 7,
+                background: "#fffbeb", border: "1px solid #fcd34d",
+                color: "#b45309", fontWeight: 600, fontSize: 13,
+                textDecoration: "none", transition: "opacity 0.15s",
+              }}
+            >
+              🟡 Đối soát thảm Bali To →
+            </a>
+          </div>
         </div>
 
         {/* Tab */}

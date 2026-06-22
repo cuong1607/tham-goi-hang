@@ -55,6 +55,13 @@ function initSchema(db: Database.Database): void {
       result_json TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS bali_check_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      google_sheet_url TEXT NOT NULL DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 }
 
@@ -142,4 +149,31 @@ export function saveHistory(
   db.prepare(
     "INSERT INTO order_check_history (input_text, inventory_source, result_json) VALUES (?, ?, ?)"
   ).run(inputText, inventorySource, JSON.stringify(resultJson));
+}
+
+// ---- Bali Check Settings ----
+
+export function getBaliSettings(): { google_sheet_url: string } {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT google_sheet_url FROM bali_check_settings ORDER BY id DESC LIMIT 1")
+    .get() as { google_sheet_url: string } | undefined;
+  return row ?? { google_sheet_url: "" };
+}
+
+export function saveBaliSettings(googleSheetUrl: string): void {
+  const db = getDb();
+  const existing = db
+    .prepare("SELECT id FROM bali_check_settings ORDER BY id DESC LIMIT 1")
+    .get() as { id: number } | undefined;
+
+  if (existing) {
+    db.prepare(
+      "UPDATE bali_check_settings SET google_sheet_url = ?, updated_at = datetime('now') WHERE id = ?"
+    ).run(googleSheetUrl, existing.id);
+  } else {
+    db.prepare(
+      "INSERT INTO bali_check_settings (google_sheet_url) VALUES (?)"
+    ).run(googleSheetUrl);
+  }
 }
