@@ -23,6 +23,7 @@ type ResultItem = {
   caption: string;
   sizeSummary: string;
   outputUrl: string | null;
+  imageBase64: string | null;
   fileName: string;
   status: "generated" | "missing_source" | "error";
   errorMessage?: string;
@@ -206,7 +207,7 @@ export default function BaliImageGeneratorPage() {
   const [parsed, setParsed] = useState<ParsedItem[] | null>(null);
   const [results, setResults] = useState<ResultItem[] | null>(null);
   const [missingImages, setMissingImages] = useState<MissingItem[]>([]);
-  const [zipUrl, setZipUrl] = useState<string | null>(null);
+  const [zipBase64, setZipBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"gallery" | "missing">("gallery");
@@ -225,11 +226,40 @@ export default function BaliImageGeneratorPage() {
       setParsed(items);
       setResults(null);
       setError("");
-      setZipUrl(null);
+      setZipBase64(null);
     } catch {
       setError("Lỗi parse text.");
     }
   }, [orderText]);
+
+  // Tạo blob URL từ base64 ZIP để download
+  const handleDownloadZip = useCallback(() => {
+    if (!zipBase64) return;
+    const byteChars = atob(zipBase64);
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([bytes], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bali-to-goi-hang-${Date.now()}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }, [zipBase64]);
+
+  const handleDownloadImage = useCallback((item: ResultItem) => {
+    if (!item.imageBase64) return;
+    const byteChars = atob(item.imageBase64);
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([bytes], { type: "image/jpeg" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = item.fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }, []);
 
   const handleGenerate = useCallback(async () => {
     if (!orderText.trim()) { setError("Vui lòng nhập text gọi hàng."); return; }
@@ -237,7 +267,7 @@ export default function BaliImageGeneratorPage() {
     setError("");
     setResults(null);
     setMissingImages([]);
-    setZipUrl(null);
+    setZipBase64(null);
 
     try {
       const res = await fetch("/api/bali-to-images/generate", {
@@ -251,7 +281,7 @@ export default function BaliImageGeneratorPage() {
       } else {
         setResults(data.items);
         setMissingImages(data.missingImages ?? []);
-        setZipUrl(data.zipUrl ?? null);
+        setZipBase64(data.zipBase64 ?? null);
         setActiveTab("gallery");
         showToast(`✅ Đã tạo ${data.totalGenerated} ảnh!${data.totalMissing > 0 ? ` Thiếu ${data.totalMissing} ảnh gốc.` : ""}`);
       }
@@ -362,7 +392,7 @@ NT
               </button>
               {(results || parsed || error) && (
                 <button
-                  onClick={() => { setParsed(null); setResults(null); setError(""); setOrderText(""); setZipUrl(null); }}
+                  onClick={() => { setParsed(null); setResults(null); setError(""); setOrderText(""); setZipBase64(null); }}
                   style={{ padding: "10px 14px", borderRadius: 7, border: `1px solid ${C.border}`, background: "#fff", color: C.muted, fontSize: 13, cursor: "pointer" }}
                 >Xóa</button>
               )}
@@ -445,19 +475,18 @@ NT
                   </div>
                 ))}
 
-                {zipUrl && (
-                  <a
-                    href={zipUrl}
-                    download
+                {zipBase64 && (
+                  <button
+                    onClick={handleDownloadZip}
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "center",
                       gap: 6, padding: "12px 20px", borderRadius: 10,
                       background: C.success, color: "#fff", fontWeight: 700, fontSize: 13,
-                      textDecoration: "none", border: "none",
+                      border: "none", cursor: "pointer",
                     }}
                   >
                     📦 Download ZIP ({generatedItems.length} ảnh)
-                  </a>
+                  </button>
                 )}
               </div>
 
@@ -514,20 +543,19 @@ NT
                           background: "#fff",
                           boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                         }}>
-                          {/* Image */}
+                          {/* Image — dùng data URL để hoạt động trên serverless */}
                           <div style={{ position: "relative", paddingTop: "75%", background: "#f3f4f6" }}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={item.outputUrl + "?t=" + Date.now()}
-                              alt={item.caption}
-                              style={{
-                                position: "absolute", top: 0, left: 0,
-                                width: "100%", height: "100%", objectFit: "cover",
-                              }}
-                              onError={e => {
-                                (e.target as HTMLImageElement).style.display = "none";
-                              }}
-                            />
+                            {item.imageBase64 && (
+                              <img
+                                src={`data:image/jpeg;base64,${item.imageBase64}`}
+                                alt={item.caption}
+                                style={{
+                                  position: "absolute", top: 0, left: 0,
+                                  width: "100%", height: "100%", objectFit: "cover",
+                                }}
+                              />
+                            )}
                           </div>
 
                           {/* Info */}
@@ -538,19 +566,19 @@ NT
                             <div style={{ fontSize: 12, color: C.primary, fontWeight: 600, marginBottom: 8 }}>
                               {item.sizeSummary}
                             </div>
-                            <a
-                              href={item.outputUrl!}
-                              download={item.fileName}
+                            <button
+                              onClick={() => handleDownloadImage(item)}
                               style={{
-                                display: "block", textAlign: "center",
+                                display: "block", textAlign: "center", width: "100%",
                                 padding: "6px 0", borderRadius: 6,
                                 background: C.primaryLight, color: C.primary,
-                                fontSize: 12, fontWeight: 600, textDecoration: "none",
+                                fontSize: 12, fontWeight: 600,
                                 border: `1px solid ${C.primaryBorder}`,
+                                cursor: "pointer",
                               }}
                             >
                               ⬇️ {item.fileName}
-                            </a>
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -613,7 +641,7 @@ NT
               </div>
 
               {/* Bottom download bar */}
-              {zipUrl && generatedItems.length > 0 && (
+              {zipBase64 && generatedItems.length > 0 && (
                 <div style={{
                   background: C.successLight, border: `1px solid ${C.successBorder}`,
                   borderRadius: 8, padding: "12px 16px",
@@ -623,9 +651,9 @@ NT
                   <span style={{ fontSize: 13, color: C.success, fontWeight: 600 }}>
                     ✅ {generatedItems.length} ảnh đã sẵn sàng
                   </span>
-                  <a href={zipUrl} download style={{ ...btnStyle(C.success), textDecoration: "none" }}>
+                  <button onClick={handleDownloadZip} style={{ ...btnStyle(C.success), border: "none", cursor: "pointer" }}>
                     📦 Download tất cả (ZIP)
-                  </a>
+                  </button>
                 </div>
               )}
             </>

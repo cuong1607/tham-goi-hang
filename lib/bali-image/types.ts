@@ -37,7 +37,8 @@ export type BaliImageResult = {
   caption: string;
   sizeSummary: string;
   sourceImagePath: string | null;
-  outputUrl: string | null;   // URL để preview
+  outputUrl: string | null;   // giữ lại cho tương thích, không dùng trên production
+  imageBase64: string | null; // base64 JPEG — dùng thay cho outputUrl trên serverless
   fileName: string;
   status: "generated" | "missing_source" | "error";
   errorMessage?: string;
@@ -49,6 +50,7 @@ export type GenerateResponse = {
   items: BaliImageResult[];
   missingImages: Array<{ group: string; pattern: string; caption: string }>;
   zipUrl: string | null;
+  zipBase64: string | null; // base64 ZIP — dùng thay cho zipUrl trên serverless
   totalGenerated: number;
   totalMissing: number;
   error?: string;

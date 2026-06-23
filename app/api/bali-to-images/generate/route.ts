@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import JSZip from "jszip";
-import fs from "fs";
 import { parseOrderText, aggregateByPattern } from "@/lib/bali-image/parsers";
 import {
   findSourceImage,
   renderImage,
-  saveImage,
-  getPublicUrl,
-  getOutputPath,
-  clearOutputDir,
 } from "@/lib/bali-image/renderer";
 import { BaliImageResult, GenerateResponse } from "@/lib/bali-image/types";
 
@@ -32,7 +27,7 @@ export async function POST(req: NextRequest) {
     const rawItems = parseOrderText(orderText);
     if (rawItems.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Không parse được text gọi hàng. Kiểm tra format: GROUP\nsize: mã." },
+        { success: false, error: "Không parse được text gọi hàng. Kiểm tra format: GROUP\\nsize: mã." },
         { status: 400 }
       );
     }
@@ -42,12 +37,11 @@ export async function POST(req: NextRequest) {
       findSourceImage(group, pattern)
     );
 
-    // --- Clear old output ---
-    clearOutputDir();
-
-    // --- Render each image ---
+    // --- Render each image (in-memory, no disk write) ---
     const results: BaliImageResult[] = [];
     const missingImages: Array<{ group: string; pattern: string; caption: string }> = [];
+    // Collect buffers for ZIP
+    const generatedBuffers: Array<{ fileName: string; buffer: Buffer }> = [];
 
     for (const agg of aggregated) {
       if (!agg.sourceImagePath) {
@@ -63,6 +57,7 @@ export async function POST(req: NextRequest) {
           sizeSummary: agg.sizeSummary,
           sourceImagePath: null,
           outputUrl: null,
+          imageBase64: null,
           fileName: agg.fileName,
           status: "missing_source",
         });
@@ -71,7 +66,9 @@ export async function POST(req: NextRequest) {
 
       try {
         const buffer = await renderImage(agg, { showCaption });
-        saveImage(agg.fileName, buffer);
+        const imageBase64 = buffer.toString("base64");
+
+        generatedBuffers.push({ fileName: agg.fileName, buffer });
 
         results.push({
           group: agg.group,
@@ -79,7 +76,8 @@ export async function POST(req: NextRequest) {
           caption: agg.caption,
           sizeSummary: agg.sizeSummary,
           sourceImagePath: agg.sourceImagePath,
-          outputUrl: getPublicUrl(agg.fileName),
+          outputUrl: null,
+          imageBase64,
           fileName: agg.fileName,
           status: "generated",
         });
@@ -91,6 +89,7 @@ export async function POST(req: NextRequest) {
           sizeSummary: agg.sizeSummary,
           sourceImagePath: agg.sourceImagePath,
           outputUrl: null,
+          imageBase64: null,
           fileName: agg.fileName,
           status: "error",
           errorMessage: err instanceof Error ? err.message : String(err),
@@ -98,35 +97,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // --- Build ZIP from all generated images ---
-    const generatedItems = results.filter((r) => r.status === "generated");
-    let zipUrl: string | null = null;
+    // --- Build ZIP in-memory ---
+    let zipBase64: string | null = null;
 
-    if (generatedItems.length > 0) {
+    if (generatedBuffers.length > 0) {
       const zip = new JSZip();
-      for (const item of generatedItems) {
-        const filePath = getOutputPath(item.fileName);
-        if (fs.existsSync(filePath)) {
-          const fileBuffer = fs.readFileSync(filePath);
-          zip.file(item.fileName, fileBuffer);
-        }
+      for (const { fileName, buffer } of generatedBuffers) {
+        zip.file(fileName, buffer);
       }
       const zipBuffer = await zip.generateAsync({
         type: "nodebuffer",
         compression: "DEFLATE",
         compressionOptions: { level: 6 },
       });
-      const zipFileName = `bali-to-goi-hang-${Date.now()}.zip`;
-      saveImage(zipFileName, zipBuffer);
-      zipUrl = getPublicUrl(zipFileName);
+      zipBase64 = zipBuffer.toString("base64");
     }
 
     const response: GenerateResponse = {
       success: true,
       items: results,
       missingImages,
-      zipUrl,
-      totalGenerated: generatedItems.length,
+      zipUrl: null,
+      zipBase64,
+      totalGenerated: generatedBuffers.length,
       totalMissing: missingImages.length,
     };
 

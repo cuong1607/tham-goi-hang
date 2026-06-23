@@ -15,8 +15,7 @@ import { normalizePattern } from "./normalizers";
 
 const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 const ASSETS_BASE = path.join(process.cwd(), "public", "assets", "bali-to");
-//const OUTPUT_BASE = path.join(process.cwd(), "public", "generated", "bali-to");
-const OUTPUT_BASE = "/tmp/generated/bali-to";
+const OUTPUT_BASE = path.join(process.cwd(), "public", "generated", "bali-to");
 /**
  * Tìm file ảnh mẫu gốc theo group + pattern.
  * Hỗ trợ:
@@ -191,17 +190,8 @@ export function saveImage(fileName: string, buffer: Buffer): string {
 /**
  * URL preview công khai của file đã lưu.
  */
-// export function getPublicUrl(fileName: string): string {
-//   return `/generated/bali-to/${fileName}`;
-// }
-
 export function getPublicUrl(fileName: string): string {
-  const filePath = path.join(OUTPUT_BASE, fileName);
-  if (fs.existsSync(filePath)) {
-    const bitmap = fs.readFileSync(filePath);
-    return `data:image/jpeg;base64,${Buffer.from(bitmap).toString('base64')}`;
-  }
-  return '';
+  return `/api/view-image?file=${fileName}`;
 }
 
 /**
