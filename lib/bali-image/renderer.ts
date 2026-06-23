@@ -1,11 +1,14 @@
 // ============================================================
-// Renderer — đọc ảnh gốc + composite SVG text overlay (sharp)
+// Renderer — đọc ảnh gốc + composite text overlay
 // ============================================================
+// Dùng @resvg/resvg-js (WASM) để render SVG text → PNG.
+// Không phụ thuộc system fonts (fontconfig). Hoạt động trên Vercel.
 // Server-side only. Never import this in client components.
 
 import sharp from "sharp";
 import fs from "fs";
 import path from "path";
+import { Resvg } from "@resvg/resvg-js";
 import { BaliImageAggregated } from "./types";
 import { normalizePattern } from "./normalizers";
 
@@ -15,7 +18,7 @@ import { normalizePattern } from "./normalizers";
 
 const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 const ASSETS_BASE = path.join(process.cwd(), "public", "assets", "bali-to");
-const OUTPUT_BASE = path.join(process.cwd(), "public", "generated", "bali-to");
+
 /**
  * Tìm file ảnh mẫu gốc theo group + pattern.
  * Hỗ trợ:
@@ -51,9 +54,41 @@ export function findSourceImage(group: string, pattern: string): string | null {
 }
 
 // ============================================================
+// Font loading (cached, chỉ đọc 1 lần)
+// ============================================================
+
+let _fontData: Buffer | null = null;
+
+function loadFontData(): Buffer {
+  if (_fontData) return _fontData;
+  // Thử nhiều đường dẫn để tìm font file
+  const candidates = [
+    path.join(process.cwd(), "fonts", "inter-black.ttf"),
+    path.join(process.cwd(), "public", "fonts", "inter-black.ttf"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      _fontData = fs.readFileSync(p);
+      return _fontData;
+    }
+  }
+  throw new Error(
+    `Font file not found. Tried: ${candidates.join(", ")}`
+  );
+}
+
+// ============================================================
 // SVG overlay builder
 // ============================================================
 
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
 /**
  * Build SVG overlay: text size summary căn giữa ảnh.
@@ -64,7 +99,7 @@ function buildOverlaySVG(
   sizeSummary: string,
   imgWidth: number,
   imgHeight: number
-): Buffer {
+): string {
   // Font size = 8% chiều rộng ảnh, giới hạn trong [24, 200]
   const fontSize = Math.max(24, Math.min(200, Math.round(imgWidth * 0.08)));
   const strokeW = Math.max(3, Math.round(fontSize * 0.12));
@@ -74,7 +109,6 @@ function buildOverlaySVG(
 
   // Wrap tại " + " nếu text quá dài
   const parts = sizeSummary.split(" + ");
-  // Ước lượng 0.55 em per char
   const charsPerLine = Math.floor(usableWidth / (fontSize * 0.6));
   const lines: string[] = [];
   let cur = "";
@@ -91,7 +125,6 @@ function buildOverlaySVG(
 
   const lineH = fontSize * 1.4;
   const totalTextH = lines.length * lineH;
-  // Căn giữa theo chiều dọc
   const startY = (imgHeight - totalTextH) / 2 + fontSize;
 
   const textLines = lines
@@ -102,7 +135,7 @@ function buildOverlaySVG(
         y="${y}"
         text-anchor="middle"
         dominant-baseline="auto"
-        font-family="Arial Black, Arial, Helvetica, sans-serif"
+        font-family="Inter"
         font-size="${fontSize}"
         font-weight="900"
         fill="white"
@@ -113,21 +146,47 @@ function buildOverlaySVG(
     })
     .join("\n");
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="${imgHeight}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="${imgHeight}">
   ${textLines}
 </svg>`;
-
-  return Buffer.from(svg);
 }
 
+/**
+ * Render SVG text overlay thành PNG buffer (transparent background)
+ * bằng @resvg/resvg-js — WASM, không cần system fonts.
+ */
 
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+let _tmpFontPath: string | null = null;
+
+function ensureFontFile(): string {
+  if (_tmpFontPath && fs.existsSync(_tmpFontPath)) return _tmpFontPath;
+
+  const fontData = loadFontData();
+
+  // Trên Vercel, chỉ /tmp là writable. Local thì dùng thư mục project.
+  const tmpDir = process.env.VERCEL ? "/tmp" : process.cwd();
+  const fontPath = path.join(tmpDir, "inter-black.ttf");
+
+  if (!fs.existsSync(fontPath)) {
+    fs.writeFileSync(fontPath, fontData);
+  }
+  _tmpFontPath = fontPath;
+  return fontPath;
+}
+
+function renderSvgToPng(svgString: string): Buffer {
+  const fontPath = ensureFontFile();
+
+  const resvg = new Resvg(svgString, {
+    font: {
+      fontFiles: [fontPath],
+      loadSystemFonts: false,
+      defaultFontFamily: "Inter",
+    },
+  });
+
+  const pngData = resvg.render();
+  return Buffer.from(pngData.asPng());
 }
 
 // ============================================================
@@ -139,7 +198,8 @@ export type RenderOptions = {
 };
 
 /**
- * Đọc ảnh gốc, composite text-only SVG overlay lên giữa ảnh, trả về Buffer JPEG.
+ * Đọc ảnh gốc, render text overlay bằng resvg → PNG,
+ * composite lên ảnh bằng sharp, trả về Buffer JPEG.
  */
 export async function renderImage(
   agg: BaliImageAggregated,
@@ -152,59 +212,17 @@ export async function renderImage(
   const imgWidth = meta.width ?? 800;
   const imgHeight = meta.height ?? 800;
 
-  const overlaySvg = buildOverlaySVG(agg.sizeSummary, imgWidth, imgHeight);
+  // Build SVG text overlay
+  const svgString = buildOverlaySVG(agg.sizeSummary, imgWidth, imgHeight);
 
+  // Render SVG → PNG bằng resvg (WASM, không cần fontconfig)
+  const overlayPng = renderSvgToPng(svgString);
+
+  // Composite PNG overlay lên ảnh gốc
   const outputBuffer = await sharp(srcPath)
-    .composite([{ input: overlaySvg, top: 0, left: 0 }])
+    .composite([{ input: overlayPng, top: 0, left: 0 }])
     .jpeg({ quality: 90 })
     .toBuffer();
 
   return outputBuffer;
-}
-
-
-// ============================================================
-// Save image to output folder
-// ============================================================
-
-/**
- * Đảm bảo thư mục output tồn tại và lưu buffer vào file.
- */
-export function ensureOutputDir(): void {
-  if (!fs.existsSync(OUTPUT_BASE)) {
-    fs.mkdirSync(OUTPUT_BASE, { recursive: true });
-  }
-}
-
-export function saveImage(fileName: string, buffer: Buffer): string {
-  ensureOutputDir();
-  const filePath = path.join(OUTPUT_BASE, fileName);
-  fs.writeFileSync(filePath, buffer);
-  return filePath;
-}
-
-/**
- * URL preview công khai của file đã lưu.
- */
-export function getPublicUrl(fileName: string): string {
-  return `/api/view-image?file=${fileName}`;
-}
-
-/**
- * Đường dẫn tuyệt đối của output file (để đọc lại khi zip).
- */
-export function getOutputPath(fileName: string): string {
-  return path.join(OUTPUT_BASE, fileName);
-}
-
-/**
- * Xóa toàn bộ thư mục output cũ trước mỗi lần generate mới.
- */
-export function clearOutputDir(): void {
-  if (fs.existsSync(OUTPUT_BASE)) {
-    const files = fs.readdirSync(OUTPUT_BASE);
-    for (const f of files) {
-      fs.unlinkSync(path.join(OUTPUT_BASE, f));
-    }
-  }
 }
