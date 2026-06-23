@@ -54,38 +54,33 @@ export function findSourceImage(group: string, pattern: string): string | null {
 // SVG overlay builder
 // ============================================================
 
-/**
- * Tính font size tự động dựa trên độ dài chuỗi và chiều rộng ảnh.
- */
-function calcFontSize(text: string, maxWidth: number): number {
-  const sizes = [56, 48, 40, 32, 26, 20, 16];
-  for (const size of sizes) {
-    if (text.length * size * 0.58 < maxWidth - 40) return size;
-  }
-  return 16;
-}
 
 /**
- * Build SVG overlay: chỉ text size summary, không có khung, không có caption.
- * Text trắng + viền đen (paint-order: stroke fill) để đọc được trên mọi nền ảnh.
- * Tự xuống dòng nếu chuỗi quá dài.
+ * Build SVG overlay: text size summary căn giữa ảnh.
+ * Font size = ~8% chiều rộng ảnh để luôn đọc được dù ảnh lớn hay nhỏ.
+ * Text trắng + viền đen dày để đọc được trên mọi nền ảnh.
  */
 function buildOverlaySVG(
   sizeSummary: string,
   imgWidth: number,
   imgHeight: number
 ): Buffer {
-  const fontSize = calcFontSize(sizeSummary, imgWidth);
-  const strokeW = Math.max(2, Math.round(fontSize * 0.08));
+  // Font size = 8% chiều rộng ảnh, giới hạn trong [24, 200]
+  const fontSize = Math.max(24, Math.min(200, Math.round(imgWidth * 0.08)));
+  const strokeW = Math.max(3, Math.round(fontSize * 0.12));
+  // Padding ngang = 5% mỗi bên
+  const padX = Math.round(imgWidth * 0.05);
+  const usableWidth = imgWidth - padX * 2;
 
-  // Wrap dài → xuống dòng tại " + "
+  // Wrap tại " + " nếu text quá dài
   const parts = sizeSummary.split(" + ");
-  const LINE_MAX = Math.floor((imgWidth - 40) / (fontSize * 0.58));
+  // Ước lượng 0.55 em per char
+  const charsPerLine = Math.floor(usableWidth / (fontSize * 0.6));
   const lines: string[] = [];
   let cur = "";
   for (const part of parts) {
     const candidate = cur ? cur + " + " + part : part;
-    if (candidate.length > LINE_MAX && cur) {
+    if (candidate.length > charsPerLine && cur) {
       lines.push(cur);
       cur = part;
     } else {
@@ -94,7 +89,7 @@ function buildOverlaySVG(
   }
   if (cur) lines.push(cur);
 
-  const lineH = fontSize + 10;
+  const lineH = fontSize * 1.4;
   const totalTextH = lines.length * lineH;
   // Căn giữa theo chiều dọc
   const startY = (imgHeight - totalTextH) / 2 + fontSize;
@@ -124,6 +119,7 @@ function buildOverlaySVG(
 
   return Buffer.from(svg);
 }
+
 
 function escapeXml(s: string): string {
   return s
