@@ -149,6 +149,18 @@ export default function Home() {
             >
               🖼️ Sinh ảnh Bali To →
             </a>
+            <a
+              href="/cuu-to-image-generator"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "7px 16px", borderRadius: 7,
+                background: "#eff6ff", border: "1px solid #93c5fd",
+                color: "#1d4ed8", fontWeight: 600, fontSize: 13,
+                textDecoration: "none", transition: "opacity 0.15s",
+              }}
+            >
+              🐑 Sinh ảnh Cừu To →
+            </a>
           </div>
         </div>
 
