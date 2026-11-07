@@ -37,6 +37,11 @@ function splitPatterns(cell: string): string[] {
   return results;
 }
 
+/** ".../BALI/Hoa Nhí.jpg" → "Hoa Nhí" */
+function fileBaseName(filePath: string): string {
+  return (filePath.split(/[\\/]/).pop() ?? filePath).replace(/\.[^.]+$/, "");
+}
+
 // ============================================================
 // Parse text gọi hàng
 // ============================================================
@@ -154,15 +159,18 @@ export function aggregateByPattern(
       ? sourceImageFinder(entry.group, entry.pattern)
       : null;
 
+    // Có ảnh mẫu → hiển thị theo đúng tên file gốc, bất kể người dùng gõ hoa/thường
+    const pattern = sourceImagePath ? fileBaseName(sourceImagePath) : entry.pattern;
+
     result.push({
       group: entry.group,
-      pattern: entry.pattern,
+      pattern,
       normalizedPattern: entry.normalizedPattern,
-      caption: formatDisplayName(entry.group, entry.pattern),
+      caption: formatDisplayName(entry.group, pattern),
       sizes,
       sizeSummary,
       sourceImagePath,
-      fileName: `${entry.group}_${entry.pattern}.jpg`,
+      fileName: `${entry.group}_${pattern}.jpg`,
     });
   }
 
