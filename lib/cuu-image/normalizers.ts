@@ -6,26 +6,23 @@
 // Vietnamese diacritics removal
 // ============================================================
 
-const VI_MAP: [RegExp, string][] = [
-  [/[àáâãäåăắặằẳẵấầẩẫậ]/g, "a"],
-  [/[èéêëềếệểễ]/g, "e"],
-  [/[ìíîïỉị]/g, "i"],
-  [/[òóôõöøồốộổỗờớợởỡ]/g, "o"],
-  [/[ùúûüừứựửữ]/g, "u"],
-  [/[ỳýỹỷỵ]/g, "y"],
-  [/[đ]/g, "d"],
-  [/[ÀÁÂÃÄÅĂẮẶẰẲẴẤẦẨẪẬ]/g, "a"],
-  [/[ÈÉÊËỀẾỆỂỄ]/g, "e"],
-  [/[ÌÍÎÏỈỊ]/g, "i"],
-  [/[ÒÓÔÕÖØỒỐỘỔỖỜỚỢỞỠ]/g, "o"],
-  [/[ÙÚÛÜỪỨỰỬỮ]/g, "u"],
-  [/[ỲÝỸỶỴ]/g, "y"],
-  [/[Đ]/g, "d"],
-];
-
+/**
+ * Tách dấu (NFD) rồi xoá dấu kết hợp → xử lý được cả text dựng sẵn (NFC)
+ * lẫn tổ hợp (NFD) từ các bộ gõ khác nhau, mọi chữ hoa/thường.
+ */
 function removeDiacritics(s: string): string {
-  for (const [re, rep] of VI_MAP) s = s.replace(re, rep);
-  return s;
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[đĐ]/g, "d");
+}
+
+/**
+ * Key so khớp "giữ dấu": NFC + lowercase + gom khoảng trắng.
+ * "LC_CẦU  VỒNG" → "lc_cầu vồng"
+ */
+export function looseKey(s: string): string {
+  return s.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 // ============================================================
@@ -134,6 +131,7 @@ export function buildSizeSummary(
 
 export function normalizePattern(pattern: string): string {
   let s = pattern.trim().replace(/\s*\(\d+\)\s*$/, "").trim();
+  s = s.replace(/[_\-]/g, " ");
   s = removeDiacritics(s);
   s = s.toLowerCase();
   s = s.replace(/\s+/g, " ").trim();

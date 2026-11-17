@@ -37,6 +37,11 @@ function splitPatterns(cell: string): string[] {
   return results;
 }
 
+/** ".../cuu-to/LC_Cầu Vồng.jpg" → "LC_Cầu Vồng" */
+function fileBaseName(filePath: string): string {
+  return (filePath.split(/[\\/]/).pop() ?? filePath).replace(/\.[^.]+$/, "");
+}
+
 // ============================================================
 // Parse text gọi hàng thảm Cừu To
 // ============================================================
@@ -139,14 +144,17 @@ export function aggregateByPattern(
       ? sourceImageFinder(entry.pattern)
       : null;
 
+    // Có ảnh mẫu → hiển thị theo đúng tên file gốc, bất kể người dùng gõ hoa/thường
+    const pattern = sourceImagePath ? fileBaseName(sourceImagePath) : entry.pattern;
+
     result.push({
-      pattern: entry.pattern,
+      pattern,
       normalizedPattern: entry.normalizedPattern,
-      caption: formatDisplayName(entry.pattern),
+      caption: formatDisplayName(pattern),
       sizes,
       sizeSummary,
       sourceImagePath,
-      fileName: `CUU_${entry.pattern}.jpg`,
+      fileName: `CUU_${pattern}.jpg`,
     });
   }
 

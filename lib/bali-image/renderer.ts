@@ -10,7 +10,7 @@ import fs from "fs";
 import path from "path";
 import { Resvg } from "@resvg/resvg-js";
 import { BaliImageAggregated } from "./types";
-import { normalizePattern } from "./normalizers";
+import { normalizePattern, looseKey } from "./normalizers";
 
 // ============================================================
 // Source image lookup
@@ -19,38 +19,44 @@ import { normalizePattern } from "./normalizers";
 const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 const ASSETS_BASE = path.join(process.cwd(), "public", "assets", "bali-to");
 
+function safeReaddir(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
 /**
- * Tìm file ảnh mẫu gốc theo group + pattern.
- * Hỗ trợ:
- *   - BACAU/08.jpg  (pattern = "08")
- *   - BACAU/8.jpg   (fallback bỏ leading zero)
- *   - .jpg / .jpeg / .png / .webp
+ * Tìm file ảnh mẫu gốc theo group + pattern — KHÔNG phân biệt hoa/thường
+ * (kể cả trên Linux/Vercel, nơi filesystem phân biệt hoa/thường).
+ * Thứ tự ưu tiên:
+ *   1. Trùng tên (giữ dấu, bỏ qua hoa/thường, gom khoảng trắng)
+ *      "hoàng gia tết 01" → "HOÀNG GIA TẾT 01.jpg"
+ *   2. Trùng sau normalizePattern (bỏ dấu, _/- thành cách, bỏ leading zero)
+ *      "8" → "08.jpg", "hoang gia tet 01" → "HOÀNG GIA TẾT 01.jpg"
+ * Hỗ trợ .jpg / .jpeg / .png / .webp
  */
 export function findSourceImage(group: string, pattern: string): string | null {
-  const groupDir = path.join(ASSETS_BASE, group);
-  if (!fs.existsSync(groupDir)) return null;
+  const groupKey = looseKey(group);
+  const groupName = safeReaddir(ASSETS_BASE).find((d) => looseKey(d) === groupKey);
+  if (!groupName) return null;
+  const groupDir = path.join(ASSETS_BASE, groupName);
 
-  const normalizedPat = normalizePattern(pattern); // e.g. "8" from "08"
-  const candidates: string[] = [];
+  const files = safeReaddir(groupDir)
+    .map((file) => {
+      const ext = path.extname(file);
+      return { file, ext: ext.toLowerCase(), base: path.basename(file, ext) };
+    })
+    .filter((f) => SUPPORTED_EXTENSIONS.includes(f.ext));
 
-  // Try both raw and normalized (leading-zero stripped)
-  const patternVariants = new Set([pattern, normalizedPat]);
-  // Also try zero-padded version if numeric (2 → 02)
-  if (/^\d+$/.test(normalizedPat)) {
-    patternVariants.add(normalizedPat.padStart(2, "0"));
-  }
+  const patKey = looseKey(pattern);
+  const exact = files.find((f) => looseKey(f.base) === patKey);
+  if (exact) return path.join(groupDir, exact.file);
 
-  for (const pat of Array.from(patternVariants)) {
-    for (const ext of SUPPORTED_EXTENSIONS) {
-      candidates.push(path.join(groupDir, `${pat}${ext}`));
-    }
-  }
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
-  return null;
+  const normalizedPat = normalizePattern(pattern);
+  const fuzzy = files.find((f) => normalizePattern(f.base) === normalizedPat);
+  return fuzzy ? path.join(groupDir, fuzzy.file) : null;
 }
 
 // ============================================================

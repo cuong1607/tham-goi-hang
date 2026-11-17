@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import { Resvg } from "@resvg/resvg-js";
 import { CuuImageAggregated } from "./types";
-import { normalizePattern } from "./normalizers";
+import { normalizePattern, looseKey } from "./normalizers";
 
 // ============================================================
 // Source image lookup
@@ -19,52 +19,37 @@ const SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"];
 const ASSETS_BASE = path.join(process.cwd(), "public", "assets", "cuu-to");
 
 /**
- * Tìm file ảnh mẫu gốc theo pattern (flat folder, không có group).
- * Hỗ trợ:
- *   - LC_1%.jpg
- *   - LC_Cầu Vồng.jpg
- *   - .jpg / .jpeg / .png / .webp
+ * Tìm file ảnh mẫu gốc theo pattern (flat folder, không có group) —
+ * KHÔNG phân biệt hoa/thường (kể cả trên Linux/Vercel).
+ * Thứ tự ưu tiên:
+ *   1. Trùng tên (giữ dấu, bỏ qua hoa/thường, gom khoảng trắng)
+ *      "lc_cầu vồng" → "LC_Cầu Vồng.jpg"
+ *   2. Trùng sau normalizePattern (bỏ dấu, _/- thành cách)
+ *      "hoa hong decor" → "Hoa Hồng_ Decor.jpg"
+ * Hỗ trợ .jpg / .jpeg / .png / .webp
  */
 export function findSourceImage(pattern: string): string | null {
-  if (!fs.existsSync(ASSETS_BASE)) return null;
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(ASSETS_BASE);
+  } catch {
+    return null;
+  }
+
+  const files = entries
+    .map((file) => {
+      const ext = path.extname(file);
+      return { file, ext: ext.toLowerCase(), base: path.basename(file, ext) };
+    })
+    .filter((f) => SUPPORTED_EXTENSIONS.includes(f.ext));
+
+  const patKey = looseKey(pattern);
+  const exact = files.find((f) => looseKey(f.base) === patKey);
+  if (exact) return path.join(ASSETS_BASE, exact.file);
 
   const normalizedPat = normalizePattern(pattern);
-  const candidates: string[] = [];
-
-  // Try exact pattern name first, then normalized
-  const patternVariants = new Set([pattern]);
-  // Also try normalized if different
-  if (normalizedPat !== pattern.toLowerCase()) {
-    patternVariants.add(normalizedPat);
-  }
-
-  for (const pat of Array.from(patternVariants)) {
-    for (const ext of SUPPORTED_EXTENSIONS) {
-      candidates.push(path.join(ASSETS_BASE, `${pat}${ext}`));
-    }
-  }
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
-  // Fallback: scan directory for case-insensitive match
-  try {
-    const files = fs.readdirSync(ASSETS_BASE);
-    const patLower = pattern.toLowerCase();
-    for (const file of files) {
-      const ext = path.extname(file).toLowerCase();
-      if (!SUPPORTED_EXTENSIONS.includes(ext)) continue;
-      const baseName = path.basename(file, ext);
-      if (baseName.toLowerCase() === patLower) {
-        return path.join(ASSETS_BASE, file);
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-
-  return null;
+  const fuzzy = files.find((f) => normalizePattern(f.base) === normalizedPat);
+  return fuzzy ? path.join(ASSETS_BASE, fuzzy.file) : null;
 }
 
 // ============================================================
